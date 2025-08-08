@@ -1,3 +1,6 @@
+#![allow(unused)]
+
+
 use raylib::prelude::*;
 
 fn main() {
@@ -26,4 +29,6 @@ fn main() {
         
         d.clear_background(Color::WHITE);
     }
+
+    todo!()
 }
