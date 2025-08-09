@@ -23,19 +23,46 @@ fn main() {
 	let operation = |x, y| x + y;
 	let operation_precise = |x: f64, y| x + y;
 
-	let buf = closure_plot(
+	let (buf, min_err, max_err) = closure_plot(
 		resolution,
 		from_bits_f16,
 		operation,
 		operation_precise
 	);
+	dbg!(min_err, max_err);
 
-	let buf = image_buffer(buf);
+	let buf = image_buffer(buf, min_err, max_err);
 
-	let image_res = 1 << resolution;
-
-	image::save_buffer("hi.png", &buf, image_res, image_res, ExtendedColorType::Rgb8)
+	image::save_buffer("addition_f16.png", &buf, image_res, image_res, ExtendedColorType::Rgb8)
 		.expect("Couldn't save image");
+
+
+
+	// 16-Bit Posits with es = 1
+	let from_bits_p16 = |n: u16| {
+		// Posits start at 0, go up to maxReal, then continue with minReal and go up
+		// This orders the posits by size
+		let n = n.wrapping_add(1 << 15);
+		P16E1::from_bits(n)
+	};
+
+	// Using addition
+	let operation = |x, y| x + y;
+	let operation_precise = |x: f64, y| x + y;
+
+	let (buf, min_err, max_err) = closure_plot(
+		resolution,
+		from_bits_p16,
+		operation,
+		operation_precise
+	);
+	dbg!(min_err, max_err);
+
+	let buf = image_buffer(buf, min_err, max_err);
+
+	image::save_buffer("addition_p16.png", &buf, image_res, image_res, ExtendedColorType::Rgb8)
+		.expect("Couldn't save image");
+
 }
 
 enum Accuracy {
@@ -51,7 +78,7 @@ fn closure_plot<T, C, FB, OP, OPC>(
 	from_bits: FB,
 	operation: OP,
 	operation_precise: OPC
-) -> Vec<Accuracy>
+) -> (Vec<Accuracy>, f64, f64)
 where
 	T: Float + Send + Sync, // Type we want to gerenate a closure plot for
 	C: Float + Send + Sync + From<T> + Into<f64> + Debug, // Second, more accurate type to compare T with
@@ -61,37 +88,46 @@ where
 {
 	use Accuracy::*;
 
-	(0u16..1 << resolution).flat_map(|x| {
-		let x = (1 << (16 - resolution)) * x;
-		(0u16..1 << resolution).map(|y| {
-			let y = (1 << (16 - resolution)) * y;
+	let mut min_err = C::infinity();
+	let mut max_err = C::zero();
 
-			let x_t = from_bits(x);
-			let y_t = from_bits(y);
-			let x_c = <C as From<T>>::from(x_t);
-			let y_c = <C as From<T>>::from(y_t);
+	(
+		(0u16..1 << resolution).flat_map(|x| {
+			let x = (1 << (16 - resolution)) * x;
+			(0u16..1 << resolution).map(|y| {
+				let y = (1 << (16 - resolution)) * y;
 
-			let result = operation(x_t, y_t);
-			let result = <C as From<T>>::from(result);
-			let result_precise = operation_precise(x_c, y_c);
+				let x_t = from_bits(x);
+				let y_t = from_bits(y);
+				let x_c = <C as From<T>>::from(x_t);
+				let y_c = <C as From<T>>::from(y_t);
 
-			let precision = -((result / result_precise).abs().log10().abs().log10());
-			// dbg!(precision);
+				let result = operation(x_t, y_t);
+				let result = <C as From<T>>::from(result);
+				let result_precise = operation_precise(x_c, y_c);
 
-			// Special cases
-			if result.is_nan() {
-				NotANumber
-			} else if result.is_infinite() {
-				Overflow
-			} else if result == result_precise {
-				Exact
-			} else if result.is_zero() && !result_precise.is_zero() {
-				Underflow
-			} else {
-				Inexact(precision.into())
-			}
-		}).collect::<Vec<Accuracy>>()
-	}).collect()
+				let precision = -((result / result_precise).abs().log10().abs().log10());
+				// dbg!(precision);
+
+				// Special cases
+				if result.is_nan() {
+					NotANumber
+				} else if result.is_infinite() {
+					Overflow
+				} else if result == result_precise {
+					Exact
+				} else if result.is_zero() && !result_precise.is_zero() {
+					Underflow
+				} else {
+					min_err = min_err.min(precision);
+					max_err = max_err.max(precision);
+					Inexact(precision.into())
+				}
+			}).collect::<Vec<Accuracy>>()
+		}).collect(),
+		min_err.into(),
+		max_err.into()
+	)
 }
 
 const PALETTE: [[u8; 3]; 5] = [
@@ -103,19 +139,19 @@ const PALETTE: [[u8; 3]; 5] = [
 ];
 
 
-fn image_buffer(buf: Vec<Accuracy>) -> Vec<u8> {
+fn image_buffer(buf: Vec<Accuracy>, min_err: f64, max_err: f64) -> Vec<u8> {
 	buf.iter().flat_map(|x| {
-		color(x)
+		color(x, min_err, max_err)
 	}).collect()
 }
 
-fn color(case: &Accuracy) -> [u8; 3] {
+fn color(case: &Accuracy, min_err: f64, max_err: f64) -> [u8; 3] {
 	use Accuracy::*;
 	match case {
 		Exact => PALETTE[0],
 		Inexact(error) => {
 			let [r, g, b] = PALETTE[1];
-			let error_adj = (16.5 - error) / 8.5;
+			let error_adj = (max_err - error) / (max_err - min_err);
 			// dbg!(error, error_adj);
 
 			let r = r as f64 * error_adj;
