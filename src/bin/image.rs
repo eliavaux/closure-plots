@@ -1,6 +1,3 @@
-// #![feature(f16)]
-// #![feature(f128)]
-
 use atomic_float::AtomicF64;
 use image::ExtendedColorType;
 use num_traits::Float;
@@ -95,7 +92,7 @@ where
 	let max_err = AtomicF64::new(0.0);
 
 	(
-		(0u16..1 << resolution).into_par_iter().flat_map(|x| {
+		(0u16..1 << resolution).into_par_iter().rev().flat_map(|x| {
 			let x = (1 << (16 - resolution)) * x;
 			(0u16..1 << resolution).map(|y| {
 				let y = (1 << (16 - resolution)) * y;
