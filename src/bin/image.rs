@@ -1,9 +1,12 @@
 // #![feature(f16)]
 // #![feature(f128)]
 
+use atomic_float::AtomicF64;
 use image::ExtendedColorType;
 use num_traits::Float;
 use half::f16;
+use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
+use std::sync::atomic::Ordering;
 use std::{fmt::Debug, iter::Iterator};
 use softposit::P16E1;
 
@@ -88,11 +91,11 @@ where
 {
 	use Accuracy::*;
 
-	let mut min_err = C::infinity();
-	let mut max_err = C::zero();
+	let min_err = AtomicF64::new(f64::INFINITY);
+	let max_err = AtomicF64::new(0.0);
 
 	(
-		(0u16..1 << resolution).flat_map(|x| {
+		(0u16..1 << resolution).into_par_iter().flat_map(|x| {
 			let x = (1 << (16 - resolution)) * x;
 			(0u16..1 << resolution).map(|y| {
 				let y = (1 << (16 - resolution)) * y;
@@ -119,14 +122,14 @@ where
 				} else if result.is_zero() && !result_precise.is_zero() {
 					Underflow
 				} else {
-					min_err = min_err.min(precision);
-					max_err = max_err.max(precision);
+					min_err.fetch_min(precision.into(), Ordering::Relaxed);
+					max_err.fetch_max(precision.into(), Ordering::Relaxed);
 					Inexact(precision.into())
 				}
 			}).collect::<Vec<Accuracy>>()
 		}).collect(),
-		min_err.into(),
-		max_err.into()
+		min_err.load(Ordering::Relaxed),
+		max_err.load(Ordering::Relaxed),
 	)
 }
 
