@@ -65,6 +65,7 @@ fn main() {
 
 }
 
+
 enum Accuracy {
 	Exact,
 	Inexact(f64), // Exact to how many decimals?
@@ -132,10 +133,10 @@ where
 
 const PALETTE: [[u8; 3]; 5] = [
 	[  0,   0,   0], // Exact
-	[255,   0, 255], // Inexact
-	[255,   0,   0], // Overflow
-	[  0,   0, 255], // Underflow
-	[255, 255,   0], // Not a number
+	[ 54,  74, 255], // Inexact
+	[255,  40,  40], // Overflow
+	[ 75, 255,  61], // Underflow
+	[255, 211,  54], // Not a number
 ];
 
 
