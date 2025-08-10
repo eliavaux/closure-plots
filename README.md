@@ -2,6 +2,8 @@
 
 Currently, only static images are implemented.
 
+---
+
 ### Dependencies
 
 - cmake (for raylib)
