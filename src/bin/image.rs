@@ -81,7 +81,7 @@ fn closure_plot<T, C, FB, OP, OPC>(
 	operation_precise: OPC
 ) -> (Vec<Accuracy>, f64, f64)
 where
-	T: Float + Send + Sync, // Type we want to gerenate a closure plot for
+	T: Float + Send + Sync, // Type we want to generate a closure plot for
 	C: Float + Send + Sync + From<T> + Into<f64> + Debug, // Second, more accurate type to compare T with
 	FB: (Fn(u16) -> T) + Send + Sync,
 	OP: (Fn(T, T) -> T) + Send + Sync,
