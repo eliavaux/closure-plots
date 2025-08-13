@@ -75,7 +75,7 @@ enum Accuracy {
 }
 
 fn closure_plot<T, C, FB, OP, OPC>(
-	resolution: u8,
+	resolution: u32,
 	from_bits: FB,
 	operation: OP,
 	operation_precise: OPC
@@ -93,9 +93,9 @@ where
 	let max_err = AtomicF64::new(0.0);
 
 	(
-		(0u16..1 << resolution).into_par_iter().rev().flat_map(|x| {
+		(0..=1u16.unbounded_shl(resolution).wrapping_sub(1)).into_par_iter().rev().flat_map(|x| {
 			let x = (1 << (16 - resolution)) * x;
-			(0u16..1 << resolution).map(|y| {
+			(0..=1u16.unbounded_shl(resolution).wrapping_sub(1)).map(|y| {
 				let y = (1 << (16 - resolution)) * y;
 
 				let x_t = from_bits(x);
