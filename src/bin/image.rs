@@ -11,7 +11,13 @@ fn main() {
 	let resolution = 12;
 	let image_res = 1 << resolution;
 
-	// 16-Bit floating points
+	// Using addition
+	fn operation<T: Float>(x: T, y: T) -> T {
+		x + y
+	}
+
+
+	// 16-Bit Floats
 	let from_bits_f16 = |n: u16| {
 		// Floats start at 0, go up to maxReal, then continue with -0 and go down to minReal
 		// This orders the floats by size
@@ -19,15 +25,11 @@ fn main() {
 		f16::from_bits(n)
 	};
 
-	// Using addition
-	let operation = |x, y| x + y;
-	let operation_precise = |x: f64, y| x + y;
-
 	let (buf, min_err, max_err) = closure_plot(
 		resolution,
 		from_bits_f16,
 		operation,
-		operation_precise
+		operation::<f64>
 	);
 	dbg!(min_err, max_err);
 
@@ -35,7 +37,6 @@ fn main() {
 
 	image::save_buffer("addition_f16.png", &buf, image_res, image_res, ExtendedColorType::Rgb8)
 		.expect("Couldn't save image");
-
 
 
 	// 16-Bit Posits with es = 1
@@ -46,15 +47,11 @@ fn main() {
 		P16E1::from_bits(n)
 	};
 
-	// Using addition
-	let operation = |x, y| x + y;
-	let operation_precise = |x: f64, y| x + y;
-
 	let (buf, min_err, max_err) = closure_plot(
 		resolution,
 		from_bits_p16,
 		operation,
-		operation_precise
+		operation::<f64>
 	);
 	dbg!(min_err, max_err);
 
@@ -62,8 +59,8 @@ fn main() {
 
 	image::save_buffer("addition_p16.png", &buf, image_res, image_res, ExtendedColorType::Rgb8)
 		.expect("Couldn't save image");
-
 }
+
 
 
 enum Accuracy {
@@ -73,6 +70,7 @@ enum Accuracy {
 	Underflow,
 	NotANumber
 }
+
 
 fn closure_plot<T, C, FB, OP, OPC>(
 	resolution: u32,
