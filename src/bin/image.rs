@@ -1,133 +1,185 @@
-use atomic_float::AtomicF64;
+#![allow(unused)]
+
+use std::fs::File;
+use std::io::Write;
+use std::iter::Iterator;
+
+use closure_plots::{accuracy::*, closure_plot::*, decimal_accuracy_plot::*};
+
 use image::ExtendedColorType;
 use num_traits::Float;
 use half::f16;
-use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
-use std::sync::atomic::Ordering;
-use std::{fmt::Debug, iter::Iterator};
 use softposit::P16E1;
+
+
+
+fn from_bits_f16(n: u16) -> f16 {
+	// Floats start at 0, go up to maxReal, then continue with -0 and go down to minReal
+	// This orders the floats by size
+	let n = if n < (1 << 15) { !n } else { n - (1 << 15) };
+	f16::from_bits(n)
+}
+
+fn from_bits_p16(n: u16) -> P16E1 {
+	// Posits start at 0, go up to maxReal, then continue with minReal and go up
+	// This orders the posits by size
+	let n = n.wrapping_add(1 << 15);
+	P16E1::from_bits(n)
+}
+
+
+// Change these
+fn operation_2d<T: Float>(x: T,) -> T {
+	x * x
+}
+
+fn operation_3d<T: Float>(x: T, y: T) -> T {
+	x * y
+}
+
+
 
 fn main() {
 	let resolution = 12;
+	let file_name = "multiplication";
+
+	// generate_decimal_accuracy_plot(resolution, file_name);
+	// generate_plots_2d(resolution, file_name);
+	generate_plots_3d(resolution, file_name);
+}
+
+
+
+fn generate_plots_3d(resolution: u32, file_name: &str) {
 	let image_res = 1 << resolution;
 
-	// Using addition
-	fn operation<T: Float>(x: T, y: T) -> T {
-		x + y
-	}
-
-
-	// 16-Bit Floats
-	let from_bits_f16 = |n: u16| {
-		// Floats start at 0, go up to maxReal, then continue with -0 and go down to minReal
-		// This orders the floats by size
-		let n = if n < (1 << 15) { !n } else { n - (1 << 15) };
-		f16::from_bits(n)
-	};
-
-	let (buf, min_err, max_err) = closure_plot(
+	let buf = closure_plot_3d(
 		resolution,
 		from_bits_f16,
-		operation,
-		operation::<f64>
+		operation_3d,
+		operation_3d::<f64>
 	);
-	dbg!(min_err, max_err);
 
-	let buf = image_buffer(buf, min_err, max_err);
+	let buf = parse_data_3d(buf);
 
-	image::save_buffer("addition_f16.png", &buf, image_res, image_res, ExtendedColorType::Rgb8)
+	image::save_buffer(format!("target/{file_name}_f16.png"), &buf, image_res, image_res, ExtendedColorType::Rgb8)
 		.expect("Couldn't save image");
 
-
-	// 16-Bit Posits with es = 1
-	let from_bits_p16 = |n: u16| {
-		// Posits start at 0, go up to maxReal, then continue with minReal and go up
-		// This orders the posits by size
-		let n = n.wrapping_add(1 << 15);
-		P16E1::from_bits(n)
-	};
-
-	let (buf, min_err, max_err) = closure_plot(
+	let buf = closure_plot_3d(
 		resolution,
 		from_bits_p16,
-		operation,
-		operation::<f64>
+		operation_3d,
+		operation_3d::<f64>
 	);
-	dbg!(min_err, max_err);
 
-	let buf = image_buffer(buf, min_err, max_err);
+	let buf = parse_data_3d(buf);
 
-	image::save_buffer("addition_p16.png", &buf, image_res, image_res, ExtendedColorType::Rgb8)
+	image::save_buffer(format!("target/{file_name}_p16.png"), &buf, image_res, image_res, ExtendedColorType::Rgb8)
 		.expect("Couldn't save image");
 }
 
+fn generate_plots_2d(resolution: u32, file_name: &str) {
+	let buf_f16 = closure_plot_2d(
+		resolution,
+		from_bits_f16,
+		operation_2d,
+		operation_2d::<f64>
+	);
+	dbg!(&buf_f16.len());
 
+	let buf_p16 = closure_plot_2d(
+		resolution,
+		from_bits_p16,
+		operation_2d,
+		operation_2d::<f64>
+	);
+	dbg!(&buf_p16.len());
 
-enum Accuracy {
-	Exact,
-	Inexact(f64), // Exact to how many decimals?
-	Overflow,
-	Underflow,
-	NotANumber
+	let mut f16 = parse_data_2d(&buf_f16);
+	let mut p16 = parse_data_2d(&buf_p16);
+	f16.sort_by(f64::total_cmp);
+	p16.sort_by(f64::total_cmp);
+
+	let mut file = File::create(format!("target/{file_name}.csv")).unwrap();
+
+	assert_eq!(f16.len(), p16.len());
+	let text: String = (0..buf_p16.len()).map(|i| {
+		format!("{},{}\n", f16[i], p16[i])
+	}).collect();
+
+	file.write_all("floats,posits\n".as_bytes()).unwrap();
+	file.write_all(text.as_bytes()).unwrap();
+}
+
+fn generate_decimal_accuracy_plot(file_name: &str) {
+	let buf_f16 = decimal_accuracy_plot(from_bits_f16);
+	let buf_p16 = decimal_accuracy_plot(from_bits_p16);
+
+	let buf_f16 = parse_data_2d(&buf_f16);
+	let buf_p16 = parse_data_2d(&buf_p16);
+
+	let mut file_f16 = File::create(format!("target/{file_name}_f16.csv")).unwrap();
+	let mut file_p16 = File::create(format!("target/{file_name}_p16.csv")).unwrap();
+
+	let text_f16: String = (0..u16::MAX).map(|i| {
+		format!("{},{}\n", from_bits_f16(i).log2(), buf_f16[i as usize])
+	}).collect();
+
+	let text_p16: String = (0..u16::MAX).map(|i| {
+		format!("{},{}\n", from_bits_p16(i).log2(), buf_p16[i as usize])
+	}).collect();
+
+	file_f16.write_all("log2(x),floats\n".as_bytes()).unwrap();
+	file_f16.write_all(text_f16.as_bytes()).unwrap();
+
+	file_p16.write_all("log2(x),posits\n".as_bytes()).unwrap();
+	file_p16.write_all(text_p16.as_bytes()).unwrap();
 }
 
 
-fn closure_plot<T, C, FB, OP, OPC>(
-	resolution: u32,
-	from_bits: FB,
-	operation: OP,
-	operation_precise: OPC
-) -> (Vec<Accuracy>, f64, f64)
-where
-	T: Float + Send + Sync, // Type we want to generate a closure plot for
-	C: Float + Send + Sync + From<T> + Into<f64> + Debug, // Second, more accurate type to compare T with
-	FB: (Fn(u16) -> T) + Send + Sync,
-	OP: (Fn(T, T) -> T) + Send + Sync,
-	OPC: (Fn(C, C) -> C) + Send + Sync, // Same operation but with C
-{
-	use Accuracy::*;
 
-	let min_err = AtomicF64::new(f64::INFINITY);
-	let max_err = AtomicF64::new(0.0);
+fn parse_data_3d(buf: Vec<Vec<Accuracy>>) -> Vec<u8> {
+	let min_err = buf.iter().flatten().filter_map(|acc| {
+		match acc {
+			Accuracy::Inexact(loss) => Some(*loss),
+			_ => None
+		}
+	}).min_by(f64::total_cmp).unwrap();
 
-	(
-		(0..=1u16.unbounded_shl(resolution).wrapping_sub(1)).into_par_iter().rev().flat_map(|x| {
-			let x = (1 << (16 - resolution)) * x;
-			(0..=1u16.unbounded_shl(resolution).wrapping_sub(1)).map(|y| {
-				let y = (1 << (16 - resolution)) * y;
+	dbg!(min_err);
 
-				let x_t = from_bits(x);
-				let y_t = from_bits(y);
-				let x_c = <C as From<T>>::from(x_t);
-				let y_c = <C as From<T>>::from(y_t);
+	let max_err = buf.iter().flatten().filter_map(|acc| {
+		match acc {
+			Accuracy::Inexact(loss) => Some(*loss),
+			_ => None
+		}
+	}).max_by(f64::total_cmp).unwrap();
 
-				let result = operation(x_t, y_t);
-				let result = <C as From<T>>::from(result);
-				let result_precise = operation_precise(x_c, y_c);
+	dbg!(max_err);
 
-				let precision = -((result / result_precise).abs().log10().abs().log10());
-				// dbg!(precision);
-
-				// Special cases
-				if result.is_nan() {
-					NotANumber
-				} else if result.is_infinite() {
-					Overflow
-				} else if result == result_precise {
-					Exact
-				} else if result.is_zero() && !result_precise.is_zero() {
-					Underflow
-				} else {
-					min_err.fetch_min(precision.into(), Ordering::Relaxed);
-					max_err.fetch_max(precision.into(), Ordering::Relaxed);
-					Inexact(precision.into())
-				}
-			}).collect::<Vec<Accuracy>>()
-		}).collect(),
-		min_err.load(Ordering::Relaxed),
-		max_err.load(Ordering::Relaxed),
-	)
+	buf.iter().rev().flatten().flat_map(|x| {
+		color(x, min_err, max_err)
+	}).collect()
 }
+
+fn parse_data_2d(buf_acc: &[Accuracy]) -> Vec<f64> {
+	let mut res = Vec::new();
+	for acc in buf_acc {
+		use Accuracy::*;
+
+		let acc = match *acc {
+		    Exact => 0.0,
+		    Inexact(loss) => loss,
+		    Overflow => f64::INFINITY,
+		    Underflow => f64::INFINITY,
+		    NotANumber => f64::INFINITY,
+		};
+		res.push(acc);
+	}
+	res
+}
+
+
 
 const PALETTE: [[u8; 3]; 5] = [
 	[  0,   0,   0], // Exact
@@ -137,12 +189,6 @@ const PALETTE: [[u8; 3]; 5] = [
 	[255, 211,  54], // Not a number
 ];
 
-
-fn image_buffer(buf: Vec<Accuracy>, min_err: f64, max_err: f64) -> Vec<u8> {
-	buf.iter().flat_map(|x| {
-		color(x, min_err, max_err)
-	}).collect()
-}
 
 fn color(case: &Accuracy, min_err: f64, max_err: f64) -> [u8; 3] {
 	use Accuracy::*;
