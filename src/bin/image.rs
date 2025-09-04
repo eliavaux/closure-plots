@@ -9,6 +9,8 @@ use closure_plots::{accuracy::*, closure_plot::*, decimal_accuracy_plot::*};
 use image::ExtendedColorType;
 use num_traits::Float;
 use half::f16;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+
 use softposit::P16E1;
 
 
@@ -139,7 +141,7 @@ fn generate_decimal_accuracy_plot(file_name: &str) {
 
 
 fn parse_data_3d(buf: Vec<Vec<Accuracy>>) -> Vec<u8> {
-	let min_err = buf.iter().flatten().filter_map(|acc| {
+	let min_err = buf.par_iter().flatten().filter_map(|acc| {
 		match acc {
 			Accuracy::Inexact(loss) => Some(*loss),
 			_ => None
@@ -148,7 +150,7 @@ fn parse_data_3d(buf: Vec<Vec<Accuracy>>) -> Vec<u8> {
 
 	dbg!(min_err);
 
-	let max_err = buf.iter().flatten().filter_map(|acc| {
+	let max_err = buf.par_iter().flatten().filter_map(|acc| {
 		match acc {
 			Accuracy::Inexact(loss) => Some(*loss),
 			_ => None
