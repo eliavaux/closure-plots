@@ -4,12 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-astro-float = "0.9.5"
 atomic_float = "1.1.0"
 half = { version = "2.6.0", features = ["num-traits"] }
 image = "0.25.6"
 num-traits = "0.2.19"
-raylib = "5.5.1"
 rayon = "1.10.0"
 softposit = "0.4.0"
 
