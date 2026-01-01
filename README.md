@@ -1,6 +1,8 @@
 ## Closure plots
 
-Simple code written for SoME4 to render closure plots of any number system.
+Simple script written for our [SoME4 video submission](https://youtu.be/wzAYGgzUtNA?si=HP2VQNxV8qdkuadv) to render closure plots of any number system.
+
+Look at the example closure plots shown in the video in more detail [here](https://plots.eliavaux.com).
 
 You can pass *any* type that implements the Float trait into `closure_plot_3d()`.
 The operation to plot the closure can be changed to whatever you like.
@@ -27,5 +29,3 @@ I'll try to fix it as soon as I get the time.
 The plots are parallelized using rayon and take about 5 seconds to run on highest resolution on
 our uni's compute server.
 If you don't want that, change the `.par_iter()` inside the `closure_plot_3d()` function to `.iter()`.
-
-
